@@ -84,55 +84,123 @@ st.set_page_config(
 
 
 # --------------------------------------------------------------------------- #
-# Theme — warm, colourful, corgi & cat vibes for Dorka 🐾
+# Theme — dynamic, company-brand-aware (falls back to a warm corgi palette) 🐾
 # --------------------------------------------------------------------------- #
-def inject_theme() -> None:
-    """Custom CSS for a cheerful, encouraging atmosphere."""
+# Curated brand accents for well-known companies (instant, no API call). Keys
+# are matched as case-insensitive substrings of the typed company name.
+BRAND_COLORS = {
+    "spotify": "1DB954", "google": "4285F4", "youtube": "FF0000",
+    "microsoft": "0078D4", "apple": "555555", "amazon": "FF9900",
+    "meta": "0866FF", "facebook": "1877F2", "instagram": "E1306C",
+    "netflix": "E50914", "linkedin": "0A66C2", "twitter": "1DA1F2",
+    "x corp": "111111", "slack": "611F69", "airbnb": "FF5A5F",
+    "uber": "000000", "ibm": "0530AD", "intel": "0071C5",
+    "oracle": "C74634", "salesforce": "00A1E0", "adobe": "FF0000",
+    "nvidia": "76B900", "tesla": "CC0000", "shopify": "96BF48",
+    "stripe": "635BFF", "paypal": "003087", "booking": "003580",
+    "revolut": "0666EB", "wise": "9FE870", "deloitte": "86BC25",
+    "kpmg": "00338D", "pwc": "D04A02", "ey": "FFE600",
+    "mckinsey": "051C2C", "bcg": "177B57", "vodafone": "E60000",
+    "telekom": "E20074", "otp": "5CB335", "morgan": "0033A0",
+    "sap": "0FAAFF", "siemens": "009999", "bosch": "EA0016",
+    "nike": "111111", "coca": "F40009", "pepsi": "004B93",
+}
+
+
+def _rgb(hex_str: str) -> tuple:
+    h = (hex_str or "").lstrip("#")
+    if len(h) != 6:
+        return (251, 146, 60)
+    try:
+        return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+    except ValueError:
+        return (251, 146, 60)
+
+
+def _mix(rgb: tuple, other: tuple, t: float) -> tuple:
+    """Blend rgb toward `other` by t (0..1)."""
+    return tuple(round(rgb[i] + (other[i] - rgb[i]) * t) for i in range(3))
+
+
+def _css(rgb: tuple, alpha: float = 1.0) -> str:
+    if alpha >= 1:
+        return "#%02x%02x%02x" % rgb
+    return f"rgba({rgb[0]},{rgb[1]},{rgb[2]},{alpha:.2f})"
+
+
+def quick_brand_hex(company: str):
+    """Instant brand accent from the curated map (no API), else None."""
+    c = (company or "").strip().lower()
+    if not c:
+        return None
+    for key, hexv in BRAND_COLORS.items():
+        if key in c:
+            return hexv
+    return None
+
+
+def inject_theme(accent_hex: str = None) -> None:
+    """
+    Inject CSS. When `accent_hex` is given (a company's brand colour), the whole
+    app is themed around it; otherwise the default warm corgi palette is used.
+    """
+    if accent_hex:
+        accent = _rgb(accent_hex)
+        white = (255, 255, 255)
+        bg1 = _css(_mix(accent, white, 0.92))
+        bg2 = _css(_mix(accent, white, 0.82))
+        side1 = _css(_mix(accent, white, 0.86))
+        side2 = _css(_mix(accent, white, 0.94))
+        head = _css(_mix(accent, (0, 0, 0), 0.30))   # darkened accent, readable
+        btn1 = _css(accent)
+        btn2 = _css(_mix(accent, white, 0.30))
+        border = _css(_mix(accent, white, 0.45))
+        glow = _css(accent, 0.35)
+    else:
+        bg1, bg2 = "#fff7ed", "#fef3c7"
+        side1, side2 = "#ffe4e6", "#ffedd5"
+        head = "#b45309"
+        btn1, btn2 = "#fb923c", "#f472b6"
+        border = "#fdba74"
+        glow = "rgba(251,146,60,.35)"
+
     st.markdown(
-        """
+        f"""
         <style>
-        /* Warm sunrise gradient background */
-        .stApp {
-            background: linear-gradient(160deg, #fff7ed 0%, #ffe9f0 45%, #fef3c7 100%);
-        }
-        section[data-testid="stSidebar"] {
-            background: linear-gradient(180deg, #ffe4e6 0%, #ffedd5 100%);
-        }
-        /* Headings in a warm, friendly tone */
-        h1, h2, h3 { color: #b45309 !important; }
-        /* Rounded, cozy buttons */
-        .stButton > button, .stDownloadButton > button {
+        .stApp {{
+            background: linear-gradient(160deg, {bg1} 0%, {bg2} 100%);
+        }}
+        section[data-testid="stSidebar"] {{
+            background: linear-gradient(180deg, {side1} 0%, {side2} 100%);
+        }}
+        h1, h2, h3 {{ color: {head} !important; }}
+        .stButton > button, .stDownloadButton > button {{
             border-radius: 999px;
-            border: 2px solid #fdba74;
+            border: 2px solid {border};
             background: #fff;
-            color: #c2410c;
+            color: {head};
             font-weight: 700;
             transition: transform .08s ease, box-shadow .12s ease;
-        }
-        .stButton > button:hover, .stDownloadButton > button:hover {
+        }}
+        .stButton > button:hover, .stDownloadButton > button:hover {{
             transform: translateY(-1px);
-            box-shadow: 0 4px 14px rgba(251,146,60,.35);
-            border-color: #fb923c;
-            color: #9a3412;
-        }
-        /* Primary buttons get the warm fill */
+            box-shadow: 0 4px 14px {glow};
+        }}
         .stButton > button[kind="primary"],
-        .stDownloadButton > button[kind="primary"] {
-            background: linear-gradient(90deg, #fb923c 0%, #f472b6 100%);
+        .stDownloadButton > button[kind="primary"] {{
+            background: linear-gradient(90deg, {btn1} 0%, {btn2} 100%);
             color: #fff;
             border: none;
-        }
-        /* Cozy rounded cards */
+        }}
         div[data-testid="stExpander"], div[data-testid="stForm"],
-        div[data-testid="stVerticalBlockBorderWrapper"] {
+        div[data-testid="stVerticalBlockBorderWrapper"] {{
             border-radius: 18px !important;
-        }
-        /* Metrics pop a little */
-        div[data-testid="stMetric"] {
+        }}
+        div[data-testid="stMetric"] {{
             background: rgba(255,255,255,.55);
             border-radius: 16px;
             padding: .5rem .25rem;
-        }
+        }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -183,8 +251,23 @@ OWNER_EMAIL = "sallosdorka@gmail.com"
 OWNER_NAME = "Dorka"
 
 
+def auth_configured() -> bool:
+    """True if native OIDC auth ([auth] in secrets) is set up."""
+    try:
+        return "auth" in st.secrets
+    except Exception:
+        return False
+
+
+def is_logged_in() -> bool:
+    try:
+        return bool(st.user.is_logged_in)
+    except Exception:
+        return False
+
+
 def _viewer_email():
-    """Best-effort signed-in viewer email (Streamlit Community Cloud / OIDC)."""
+    """Best-effort signed-in viewer email (OIDC / Community Cloud)."""
     for getter in (
         lambda: st.user.email,
         lambda: st.user.get("email"),
@@ -199,12 +282,29 @@ def _viewer_email():
     return None
 
 
+def _viewer_fullname():
+    """Best-effort signed-in viewer display name (from Google login)."""
+    for getter in (
+        lambda: st.user.name,
+        lambda: st.user.get("name"),
+        lambda: st.user.given_name,
+    ):
+        try:
+            name = getter()
+            if name:
+                return str(name)
+        except Exception:
+            continue
+    return None
+
+
 def resolve_viewer_name():
     """
     Decide who's viewing. Priority:
       1. A name the visitor typed in the sidebar (works on public apps).
-      2. The signed-in viewer's email (private app or st.login) → owner / username.
-      3. Unknown → None (greeted with a neutral fallback).
+      2. The signed-in (Google) viewer: owner → "Dorka", else their first name.
+      3. The viewer's email username.
+      4. Unknown → None (greeted with a neutral fallback).
     """
     manual = (st.session_state.get("manual_name") or "").strip()
     if manual:
@@ -212,10 +312,45 @@ def resolve_viewer_name():
     email = _viewer_email()
     if email and email.strip().lower() == OWNER_EMAIL:
         return OWNER_NAME
+    full = _viewer_fullname()
+    if full:
+        return full.split()[0]  # friendly first name
     if email:
         local = email.split("@")[0].replace(".", " ").replace("_", " ").strip()
         return local.title() if local else None
     return None
+
+
+def render_auth_box() -> None:
+    """Sidebar: Google sign-in / signed-in identity card, when auth is set up."""
+    if not auth_configured():
+        return
+    if is_logged_in():
+        pic = None
+        try:
+            pic = st.user.picture
+        except Exception:
+            pic = None
+        c1, c2 = st.sidebar.columns([1, 3], vertical_alignment="center")
+        if pic:
+            c1.image(pic, width=46)
+        else:
+            c1.markdown("<div style='font-size:2rem'>🐶</div>",
+                        unsafe_allow_html=True)
+        name = _viewer_fullname() or "Signed in"
+        email = _viewer_email() or ""
+        c2.markdown(f"**{name}**  \n<span style='font-size:.8rem;color:#6b7280'>"
+                    f"{email}</span>", unsafe_allow_html=True)
+        if st.sidebar.button("Log out 🐾", use_container_width=True):
+            st.logout()
+    else:
+        st.sidebar.button(
+            "🔐 Sign in with Google",
+            type="primary",
+            use_container_width=True,
+            on_click=st.login,
+        )
+    st.sidebar.divider()
 
 
 def who() -> str:
@@ -239,8 +374,11 @@ def init_state() -> None:
     st.session_state.setdefault("cv_format", "")       # 'pdf' | 'docx' | 'txt'
     st.session_state.setdefault("job_ad", "")          # pasted job advert
     st.session_state.setdefault("company", "")          # target company (optional)
+    st.session_state.setdefault("brand_accent", None)    # hex accent for theming
     # --- Recruiter & ATS analysis results --- #
     st.session_state.setdefault("match_score", None)     # int 0-100
+    st.session_state.setdefault("role_summary", "")      # what the company wants
+    st.session_state.setdefault("fit_summary", "")       # why this candidate fits
     st.session_state.setdefault("missing_keywords", [])  # top 5
     st.session_state.setdefault("red_flags", [])         # 3 quick-spot issues
     # advice: actionable XYZ-rewrite / ATS items the user accepts or rejects.
@@ -254,6 +392,7 @@ def init_state() -> None:
     st.session_state.setdefault("new_cv_ext", "")
     st.session_state.setdefault("cover_letter", "")     # tailored cover letter text
     st.session_state.setdefault("generation_done", False)
+    st.session_state.setdefault("selected_output", "resume")  # final-choice card
     # --- Interview prep --- #
     st.session_state.setdefault("interview_prep", {})    # dict of tip lists
     st.session_state.setdefault("interview_prep_done", False)
@@ -443,44 +582,49 @@ def _extract_json(text: str):
     return json.loads(candidate)
 
 
-def analyze_cv(client, cv_text: str, job_ad: str) -> dict:
+def analyze_cv(client, cv_text: str, job_ad: str, company: str = "") -> dict:
     """
-    Run a 3-step Recruiter & ATS analysis comparing the resume to the job ad.
-
-    Returns a dict:
-        {
-          "match_score": int,                 # 0-100
-          "missing_keywords": [str, ...],      # top 5
-          "red_flags": [str, ...],             # 3 quick-spot issues
-          "recommendations": [                  # actionable, accept/reject items
-            {"kind": "xyz", "title", "original", "suggestion", "detail"},
-            {"kind": "ats", "title", "original", "suggestion", "detail"}
-          ]
-        }
+    Run a 3-step Recruiter & ATS analysis comparing the resume to the job ad,
+    plus a short match summary and a brand-colour suggestion.
     """
+    company = (company or "").strip()
+    company_line = (
+        f'The target company is "{company}".' if company
+        else "No specific company was named."
+    )
     prompt = f"""You are a senior technical recruiter and an ATS (Applicant
 Tracking System) parser combined. Analyse the candidate's RESUME against the JOB
 DESCRIPTION using this strict framework and be brutally honest but constructive.
+{company_line}
 
 Produce:
-1. MATCH SCORE: an integer 0-100 estimating how well the resume fits the role.
-2. MISSING KEYWORDS: the top 5 important keywords/skills from the job description
+1. ROLE SUMMARY: in 1-2 crisp sentences, what exactly is the company looking for
+   in this role.
+2. FIT SUMMARY: in 1-2 crisp sentences, why THIS candidate (based on their
+   resume) is a strong fit for THIS role. Be specific and truthful, encouraging.
+3. MATCH SCORE: an integer 0-100 estimating how well the resume fits the role.
+4. MISSING KEYWORDS: the top 5 important keywords/skills from the job description
    that are absent or under-represented in the resume.
-3. RED FLAGS: exactly 3 things a hiring manager would notice in under 10 seconds
+5. RED FLAGS: exactly 3 things a hiring manager would notice in under 10 seconds
    that hurt this candidate (e.g. vague bullets, no metrics, job-hopping,
    missing must-have, walls of text, irrelevant focus).
-4. REWRITE RECOMMENDATIONS (Google XYZ formula): pick specific WEAK bullet points
+6. REWRITE RECOMMENDATIONS (Google XYZ formula): pick specific WEAK bullet points
    from the resume and rewrite them as "Accomplished [X] as measured by [Y], by
    doing [Z]". Quote the real original bullet in "original" and put the rewritten
    version in "suggestion". Stay truthful — if a metric is unknown, use a
    clearly placeholder like "[X]%" the candidate can fill in.
-5. ATS OPTIMIZATION: identify sections an ATS or a tired hiring manager would
+7. ATS OPTIMIZATION: identify sections an ATS or a tired hiring manager would
    skip or skim, and provide a "scroll-stopping" rewrite. Put what is being
    skipped in "original" and the punchier rewrite in "suggestion".
+8. BRAND HEX: a 6-digit hex colour (no #) matching the target company's brand
+   (or its industry's vibe if the company is unknown). Tasteful, readable.
 
 Return ONLY valid JSON in EXACTLY this shape (no prose, no markdown fences):
 {{
+  "role_summary": "",
+  "fit_summary": "",
   "match_score": <int>,
+  "brand_hex": "",
   "missing_keywords": ["", "", "", "", ""],
   "red_flags": ["", "", ""],
   "recommendations": [
@@ -537,8 +681,15 @@ Rules for "recommendations":
             }
         )
 
+    brand_hex = str(data.get("brand_hex", "")).strip().lstrip("#")
+    if len(brand_hex) != 6:
+        brand_hex = ""
+
     return {
+        "role_summary": str(data.get("role_summary", "")).strip(),
+        "fit_summary": str(data.get("fit_summary", "")).strip(),
         "match_score": score,
+        "brand_hex": brand_hex,
         "missing_keywords": keywords,
         "red_flags": red_flags,
         "recommendations": recommendations,
@@ -1212,6 +1363,7 @@ def prep_to_text(prep: dict, job_ad_title: str = "") -> str:
 # Sidebar — CV upload
 # --------------------------------------------------------------------------- #
 def render_sidebar() -> None:
+    render_auth_box()
     show_corgi_in_sidebar()
     st.sidebar.title(f"🐾 {whos()} CV Corner")
     st.sidebar.caption("Drop your CV here and let the pack work its magic. 🐶")
@@ -1259,20 +1411,58 @@ def render_sidebar() -> None:
         with st.sidebar.expander("👀 Peek at what we read"):
             st.text(st.session_state.cv_text[:5000])
 
-    # --- Optional: who's using the app (personalises the greeting) --- #
-    st.sidebar.divider()
-    st.sidebar.text_input(
-        "👋 What should we call you?",
-        key="manual_name",
-        placeholder="e.g. Dorka",
-        help="Optional — personalises the app for you. If you're signed in to "
-             "Streamlit, we may already know your name.",
-    )
+    # --- Optional: who's using the app (only when not signed in) --- #
+    if not is_logged_in():
+        st.sidebar.divider()
+        st.sidebar.text_input(
+            "👋 What should we call you?",
+            key="manual_name",
+            placeholder="e.g. Dorka",
+            help="Optional — personalises the app for you. Or sign in with "
+                 "Google above so we know it's you automatically.",
+        )
 
 
 # --------------------------------------------------------------------------- #
 # Main page
 # --------------------------------------------------------------------------- #
+def render_match_summary() -> None:
+    """Prominent top-of-output block: what the company wants + why you fit."""
+    role = (st.session_state.get("role_summary") or "").strip()
+    fit = (st.session_state.get("fit_summary") or "").strip()
+    score = st.session_state.get("match_score")
+    if not (role or fit):
+        return
+
+    rgb = _rgb(st.session_state.get("brand_accent") or "0F766E")
+    tint = _css(_mix(rgb, (255, 255, 255), 0.90))
+    bar = _css(rgb)
+    head = _css(_mix(rgb, (0, 0, 0), 0.30))
+    company = (st.session_state.get("company") or "").strip()
+    title = f"Why you &amp; {company}" if company else "Why you fit this role"
+
+    def esc(s):
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    html = (
+        f"<div style='background:{tint};border-left:7px solid {bar};"
+        f"border-radius:14px;padding:16px 20px;margin:4px 0 10px'>"
+        f"<div style='font-weight:800;font-size:1.2rem;color:{head};"
+        f"margin-bottom:8px'>⚡ {title} 🤝</div>"
+    )
+    if role:
+        html += (f"<p style='margin:.25rem 0'><b>🎯 What they want:</b> "
+                 f"{esc(role)}</p>")
+    if fit:
+        html += (f"<p style='margin:.25rem 0'><b>✨ Why you're a strong fit:</b> "
+                 f"{esc(fit)}</p>")
+    if score is not None:
+        html += (f"<p style='margin:.5rem 0 0;font-weight:800;color:{head}'>"
+                 f"🎯 Match score: {score}/100</p>")
+    html += "</div>"
+    st.markdown(html, unsafe_allow_html=True)
+
+
 def render_analysis() -> None:
     """Show the Recruiter & ATS findings: score, keywords, red flags."""
     score = st.session_state.match_score
@@ -1596,12 +1786,68 @@ def render_generation() -> None:
         base = os.path.splitext(st.session_state.cv_filename or "cv")[0]
         safe = re.sub(r"[^A-Za-z0-9_-]+", "_", base).strip("_") or "cv"
 
-        tab_resume, tab_cover, tab_prep = st.tabs(
-            ["📄 Finalized Résumé", "✉️ Cover Letter", "🎤 Interview Prep"]
-        )
+        # --- Big visual CTA cards: pick which deliverable to open --- #
+        st.markdown(f"### 👇 Your three deliverables, {who()} — pick one to open:")
+        rgb = _rgb(st.session_state.get("brand_accent") or "0F766E")
+        head = _css(_mix(rgb, (0, 0, 0), 0.30))
+        cards = [
+            ("resume", "📄", "Finalized Résumé", "Tailored & ready to download"),
+            ("cover", "✉️", "Cover Letter", "Matching letter, copy in a click"),
+            ("prep", "🎤", "Interview Prep", "Questions, points & OneNote"),
+        ]
+        cols = st.columns(3)
+        for col, (key, icon, title, desc) in zip(cols, cards):
+            selected = st.session_state.selected_output == key
+            with col:
+                with st.container(border=True):
+                    ring = _css(rgb) if selected else "transparent"
+                    st.markdown(
+                        f"<div style='text-align:center;border-top:4px solid {ring};"
+                        f"border-radius:8px;padding-top:8px'>"
+                        f"<div style='font-size:2.6rem;line-height:1'>{icon}</div>"
+                        f"<div style='font-weight:800;font-size:1.05rem;"
+                        f"color:{head};margin-top:4px'>{title}</div>"
+                        f"<div style='font-size:.82rem;color:#6b7280;"
+                        f"min-height:2.6em;margin:.3rem 0 .2rem'>{desc}</div></div>",
+                        unsafe_allow_html=True,
+                    )
+                    if st.button(
+                        "✅ Open" if selected else "Open",
+                        key=f"card_{key}",
+                        type="primary" if selected else "secondary",
+                        use_container_width=True,
+                    ):
+                        st.session_state.selected_output = key
+                        st.rerun()
 
-        # --- Résumé tab --- #
-        with tab_resume:
+        st.divider()
+        selected = st.session_state.selected_output
+
+        # --- Selected panel --- #
+        if selected == "cover":
+            st.subheader("✉️ Cover Letter")
+            st.markdown(
+                "**📋 Copy it** with the icon in the top-right of the box below, "
+                "or **⬇️ download** it as a file. 🐾"
+            )
+            st.code(st.session_state.cover_letter, language="text")
+            st.download_button(
+                "✉️ Download Cover Letter (.txt) 🦴",
+                data=st.session_state.cover_letter.encode("utf-8"),
+                file_name=f"{safe}_cover_letter.txt",
+                mime="text/plain",
+                type="primary",
+                use_container_width=True,
+            )
+            st.caption(
+                "Tailored just for this role and tuned to match your résumé's "
+                f"tone. Go get 'em, {who()}! 🐾🐱💛"
+            )
+        elif selected == "prep":
+            st.subheader("🎤 Interview Prep")
+            render_interview_prep(safe)
+        else:
+            st.subheader("📄 Finalized Résumé")
             st.markdown("**⬇️ Download your finalized résumé (Word, editable):**")
             st.download_button(
                 f"🐶 Download Résumé (.{ext}) 🦴",
@@ -1628,31 +1874,6 @@ def render_generation() -> None:
                     "A clean, modern, fully editable Word document — open it and "
                     "fine-tune anything you like. ✨"
                 )
-
-        # --- Cover letter tab --- #
-        with tab_cover:
-            st.markdown(
-                "**📋 Copy it** with the icon in the top-right of the box below, "
-                "or **⬇️ download** it as a file. 🐾"
-            )
-            # st.code gives a one-click copy button in its corner.
-            st.code(st.session_state.cover_letter, language="text")
-            st.download_button(
-                "✉️ Download Cover Letter (.txt) 🦴",
-                data=st.session_state.cover_letter.encode("utf-8"),
-                file_name=f"{safe}_cover_letter.txt",
-                mime="text/plain",
-                type="primary",
-                use_container_width=True,
-            )
-            st.caption(
-                "Tailored just for this role and tuned to match your résumé's "
-                f"tone. Go get 'em, {who()}! 🐾🐱💛"
-            )
-
-        # --- Interview prep tab --- #
-        with tab_prep:
-            render_interview_prep(safe)
 
 
 def render_main() -> None:
@@ -1685,14 +1906,22 @@ def render_main() -> None:
         label_visibility="collapsed",
     )
 
-    # --- Optional company (drives the document's styling/colour) --- #
+    # --- Optional company (drives the app + document styling/colour) --- #
     st.session_state.company = st.text_input(
         "🏢 Company (optional)",
         value=st.session_state.company,
         placeholder="e.g. Spotify — leave empty for a general, neutral style",
-        help="If given, the corgis colour your résumé to match the company's "
-             "vibe. Empty = a clean, general professional look.",
+        help="If given, the corgis colour the whole app AND your résumé to match "
+             "the company's brand. Empty = a clean, general look.",
     )
+    # Live theming: a known brand colours the app instantly; unknown companies
+    # get their colour from the AI during analysis. Clearing it resets the theme.
+    _comp = st.session_state.company.strip()
+    _curated = quick_brand_hex(_comp)
+    if _curated:
+        st.session_state.brand_accent = _curated
+    elif not _comp:
+        st.session_state.brand_accent = None
 
     if st.button(
         "🐶 Fetch My Tailoring Tips! 🐾", type="primary", use_container_width=True
@@ -1709,16 +1938,24 @@ def render_main() -> None:
                 f"The corgis are fetching the best keywords for you, {who()}… 🐾🐕"
             ):
                 try:
+                    company = st.session_state.company.strip()
                     result = analyze_cv(
                         client,
                         st.session_state.cv_text,
                         st.session_state.job_ad,
+                        company,
                     )
                     st.session_state.match_score = result["match_score"]
+                    st.session_state.role_summary = result["role_summary"]
+                    st.session_state.fit_summary = result["fit_summary"]
                     st.session_state.missing_keywords = result["missing_keywords"]
                     st.session_state.red_flags = result["red_flags"]
                     st.session_state.advice = result["recommendations"]
                     st.session_state.analysis_done = True
+                    # Brand accent: curated map first, else the AI's suggestion.
+                    st.session_state.brand_accent = (
+                        quick_brand_hex(company) or result["brand_hex"] or None
+                    )
                     # A fresh analysis invalidates any previous documents.
                     st.session_state.generation_done = False
                     st.session_state.new_cv_text = ""
@@ -1726,11 +1963,13 @@ def render_main() -> None:
                     st.session_state.cover_letter = ""
                     st.session_state.interview_prep = {}
                     st.session_state.interview_prep_done = False
+                    st.rerun()
                 except Exception as exc:
                     show_api_error(exc, "sniffing out your tailoring tips")
 
     if st.session_state.analysis_done:
         st.divider()
+        render_match_summary()
         render_analysis()
         render_advice()
         render_generation()
@@ -1739,7 +1978,10 @@ def render_main() -> None:
 def main() -> None:
     # Resolve who's viewing once per run, before anything is rendered.
     st.session_state["_viewer_name"] = resolve_viewer_name()
-    inject_theme()
+    # Theme the whole app around the target company's brand colour (if any).
+    company = (st.session_state.get("company") or "").strip()
+    accent = st.session_state.get("brand_accent") or quick_brand_hex(company)
+    inject_theme(accent)
     render_sidebar()
     render_main()
 
