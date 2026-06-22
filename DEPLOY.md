@@ -55,6 +55,33 @@ Then click **Deploy**. First build takes a couple of minutes.
   every viewer is identified, set the app to **private** (Settings → Sharing →
   restrict who can view) — then Streamlit always knows the viewer's email.
 
+## 4b. (Optional) Google sign-in — show the visitor's real name
+This makes the app greet each visitor by their Google name automatically (no
+manual typing), and works on a **public** app.
+
+1. Go to https://console.cloud.google.com → create/select a project.
+2. **APIs & Services → OAuth consent screen** → External → fill app name +
+   your email → save. Add yourself under **Test users**.
+3. **APIs & Services → Credentials → Create credentials → OAuth client ID** →
+   type **Web application**.
+   - **Authorized redirect URI:** `https://YOUR-APP.streamlit.app/oauth2callback`
+     (use your real app URL).
+4. Copy the **Client ID** and **Client secret**.
+5. In Streamlit **Settings → Secrets**, add an `[auth]` section:
+   ```toml
+   [auth]
+   redirect_uri = "https://YOUR-APP.streamlit.app/oauth2callback"
+   cookie_secret = "paste-a-long-random-string-here"
+   client_id = "xxxxx.apps.googleusercontent.com"
+   client_secret = "xxxxx"
+   server_metadata_url = "https://accounts.google.com/.well-known/openid-configuration"
+   ```
+6. Save → the app reboots. A **🔐 Sign in with Google** button appears in the
+   sidebar; once signed in, the visitor's name + photo show there.
+
+Without this section the app still works — visitors just use the optional
+"What should we call you?" field instead.
+
 ## 5. Updating the app later
 Just push to GitHub — Streamlit redeploys automatically:
 
