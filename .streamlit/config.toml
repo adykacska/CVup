@@ -1,0 +1,8 @@
+# Force a light theme for every visitor (ignores their dark/light system setting).
+[theme]
+base = "light"
+primaryColor = "#fb923c"
+backgroundColor = "#fff7ed"
+secondaryBackgroundColor = "#ffe4e6"
+textColor = "#3b2f2a"
+font = "sans serif"

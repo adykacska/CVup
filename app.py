@@ -200,7 +200,15 @@ def _viewer_email():
 
 
 def resolve_viewer_name():
-    """Return the owner's name for the owner, else a prettified username."""
+    """
+    Decide who's viewing. Priority:
+      1. A name the visitor typed in the sidebar (works on public apps).
+      2. The signed-in viewer's email (private app or st.login) → owner / username.
+      3. Unknown → None (greeted with a neutral fallback).
+    """
+    manual = (st.session_state.get("manual_name") or "").strip()
+    if manual:
+        return manual
     email = _viewer_email()
     if email and email.strip().lower() == OWNER_EMAIL:
         return OWNER_NAME
@@ -1250,6 +1258,16 @@ def render_sidebar() -> None:
         )
         with st.sidebar.expander("👀 Peek at what we read"):
             st.text(st.session_state.cv_text[:5000])
+
+    # --- Optional: who's using the app (personalises the greeting) --- #
+    st.sidebar.divider()
+    st.sidebar.text_input(
+        "👋 What should we call you?",
+        key="manual_name",
+        placeholder="e.g. Dorka",
+        help="Optional — personalises the app for you. If you're signed in to "
+             "Streamlit, we may already know your name.",
+    )
 
 
 # --------------------------------------------------------------------------- #
