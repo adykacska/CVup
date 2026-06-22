@@ -15,6 +15,7 @@ Workflow:
 The Gemini API key is read securely from `st.secrets["GEMINI_API_KEY"]`.
 """
 
+import datetime
 import io
 import json
 import os
@@ -351,6 +352,102 @@ def render_auth_box() -> None:
             on_click=st.login,
         )
     st.sidebar.divider()
+
+
+def require_login() -> None:
+    """
+    Gate the whole tool behind Google sign-in. Only active when auth is
+    configured (so local/dev without [auth] still works). Stops the script
+    with a login screen if the visitor isn't signed in.
+    """
+    if not auth_configured() or is_logged_in():
+        return
+    inject_theme()
+    st.title("Career Magic 🐶🐱")
+    c1, c2, c3 = st.columns([1, 1, 1])
+    with c2:
+        show_corgi(width=240)
+    st.markdown(
+        "<div style='text-align:center;font-size:1.05rem;margin:.5rem 0 1rem'>"
+        "🐾 This is a private little tool. Please sign in with Google to start "
+        "tailoring your CV. 🐶</div>",
+        unsafe_allow_html=True,
+    )
+    lc1, lc2, lc3 = st.columns([1, 1, 1])
+    with lc2:
+        st.button(
+            "🔐 Sign in with Google",
+            type="primary",
+            use_container_width=True,
+            on_click=st.login,
+        )
+    st.stop()
+
+
+# --------------------------------------------------------------------------- #
+# Activity logging (so the owner can review what visitors did)
+# --------------------------------------------------------------------------- #
+LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+LOG_FILE = os.path.join(LOG_DIR, "activity.jsonl")
+
+
+def log_event(action: str, **details) -> None:
+    """Append one activity record (timestamp + viewer + action) to the log."""
+    try:
+        rec = {
+            "ts": datetime.datetime.now(datetime.timezone.utc)
+            .isoformat(timespec="seconds"),
+            "email": _viewer_email() or "",
+            "name": _viewer_fullname() or st.session_state.get("_viewer_name") or "",
+            "action": action,
+        }
+        rec.update({k: v for k, v in details.items() if v not in (None, "")})
+        os.makedirs(LOG_DIR, exist_ok=True)
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except Exception:
+        pass  # logging must never break the app
+
+
+def read_activity() -> list:
+    """Read all logged events (most recent first)."""
+    rows = []
+    try:
+        with open(LOG_FILE, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    try:
+                        rows.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
+    except FileNotFoundError:
+        pass
+    return list(reversed(rows))
+
+
+def render_admin_panel() -> None:
+    """Owner-only: view & download the activity log from the sidebar."""
+    email = (_viewer_email() or "").strip().lower()
+    if email != OWNER_EMAIL:
+        return
+    rows = read_activity()
+    with st.sidebar.expander(f"🔐 Activity log ({len(rows)})"):
+        st.caption(
+            "Owner-only. ⚠️ Resets when the app redeploys/reboots "
+            "(ephemeral storage). Ask me to wire Google Sheets for permanence."
+        )
+        if rows:
+            st.dataframe(rows, use_container_width=True, height=260)
+            st.download_button(
+                "⬇️ Download log (JSON)",
+                data=json.dumps(rows, ensure_ascii=False, indent=2).encode(),
+                file_name="activity_log.json",
+                mime="application/json",
+                use_container_width=True,
+            )
+        else:
+            st.write("No activity recorded yet.")
 
 
 def who() -> str:
@@ -1412,6 +1509,7 @@ def prep_to_text(prep: dict, job_ad_title: str = "") -> str:
 # --------------------------------------------------------------------------- #
 def render_sidebar() -> None:
     render_auth_box()
+    render_admin_panel()
     show_corgi_in_sidebar()
     st.sidebar.title(f"🐾 {whos()} CV Corner")
     st.sidebar.caption("Drop your CV here and let the pack work its magic. 🐶")
@@ -1445,6 +1543,8 @@ def render_sidebar() -> None:
             st.session_state.new_cv_text = ""
             st.session_state.new_cv_data = b""
             st.session_state.generation_done = False
+            log_event("upload_cv", filename=uploaded.name, format=fmt,
+                      chars=len(text))
             st.sidebar.success(
                 f"🐶 Got it, {who()}! “{uploaded.name}” ({fmt.upper()}) is in good paws. 🐾"
             )
@@ -1660,6 +1760,8 @@ def render_interview_prep(safe_name: str) -> None:
                         (st.session_state.company or "").strip(),
                     )
                     st.session_state.interview_prep_done = True
+                    log_event("interview_prep",
+                              company=(st.session_state.company or "").strip())
                     st.rerun()
                 except Exception as exc:
                     show_api_error(exc, "preparing your interview tips")
@@ -1824,6 +1926,9 @@ def render_generation() -> None:
                 st.session_state.new_cv_text = preview
                 st.session_state.cover_letter = cover
                 st.session_state.generation_done = True
+                log_event("generate_documents",
+                          company=(st.session_state.company or "").strip(),
+                          format=ext)
             except Exception as exc:
                 show_api_error(exc, "writing your documents")
                 return
@@ -2015,6 +2120,8 @@ def render_main() -> None:
                     st.session_state.cover_letter = ""
                     st.session_state.interview_prep = {}
                     st.session_state.interview_prep_done = False
+                    log_event("analyze", company=company,
+                              score=result["match_score"])
                     st.rerun()
                 except Exception as exc:
                     show_api_error(exc, "sniffing out your tailoring tips")
@@ -2028,8 +2135,14 @@ def render_main() -> None:
 
 
 def main() -> None:
+    # Require Google sign-in (when auth is configured) before anything else.
+    require_login()
     # Resolve who's viewing once per run, before anything is rendered.
     st.session_state["_viewer_name"] = resolve_viewer_name()
+    # Log the sign-in once per session.
+    if is_logged_in() and not st.session_state.get("_login_logged"):
+        log_event("login")
+        st.session_state["_login_logged"] = True
     # Theme the whole app around the target company's brand colour (if any).
     company = (st.session_state.get("company") or "").strip()
     accent = st.session_state.get("brand_accent") or quick_brand_hex(company)
