@@ -1,6 +1,9 @@
 # --- Secrets: NEVER commit real API keys ---
 .streamlit/secrets.toml
 
+# --- Runtime activity log (may contain visitor emails) ---
+data/
+
 # Python
 __pycache__/
 *.py[cod]
