@@ -1150,6 +1150,40 @@ def _run(paragraph, text, *, bold=False, italic=False, size=None, color=None,
     return r
 
 
+def _shade_cell(cell, hex6: str) -> None:
+    """Fill a table cell with a solid colour (the brand header band)."""
+    tcPr = cell._tc.get_or_add_tcPr()
+    shd = OxmlElement("w:shd")
+    shd.set(qn("w:val"), "clear")
+    shd.set(qn("w:color"), "auto")
+    shd.set(qn("w:fill"), hex6)
+    tcPr.append(shd)
+
+
+def _cell_margins(cell, top=140, bottom=140, left=220, right=220) -> None:
+    """Inner padding for a cell, in dxa (twentieths of a point)."""
+    tcPr = cell._tc.get_or_add_tcPr()
+    tcMar = OxmlElement("w:tcMar")
+    for tag, val in (("top", top), ("bottom", bottom),
+                     ("left", left), ("right", right)):
+        node = OxmlElement(f"w:{tag}")
+        node.set(qn("w:w"), str(val))
+        node.set(qn("w:type"), "dxa")
+        tcMar.append(node)
+    tcPr.append(tcMar)
+
+
+def _luma(rgb: tuple) -> float:
+    r, g, b = (c / 255 for c in rgb)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _on_color(rgb: tuple):
+    """Readable text colour (white or near-black) on top of `rgb`."""
+    return RGBColor(0xFF, 0xFF, 0xFF) if _luma(rgb) < 0.6 \
+        else RGBColor(0x1A, 0x1A, 0x1A)
+
+
 def build_docx_styled(data: dict, accent: tuple = DEFAULT_ACCENT) -> bytes:
     """
     Render a structured CV dict into a clean, modern, ATS-friendly Word document:
@@ -1183,32 +1217,46 @@ def build_docx_styled(data: dict, accent: tuple = DEFAULT_ACCENT) -> bytes:
         p.paragraph_format.space_before = Pt(0)
         _run(p, "", size=pt)
 
-    # --- Header --- #
+    on = _on_color(accent)               # readable text colour on the band
+    soft = _mix(accent, (255, 255, 255), 0.78) if _luma(accent) < 0.6 \
+        else _mix(accent, (0, 0, 0), 0.45)   # softer contact colour on the band
+
+    # --- Header: a thick brand-coloured band carrying the personal details --- #
     name = str(data.get("name", "")).strip()
-    if name:
-        p = doc.add_paragraph()
-        p.paragraph_format.space_after = Pt(0)
-        _run(p, name, bold=True, size=26, color=INK)
-
     title = str(data.get("title", "")).strip()
-    if title:
-        p = doc.add_paragraph()
-        p.paragraph_format.space_after = Pt(2)
-        _run(p, title, size=12.5, color=accent)
-
     contact = [str(c).strip() for c in (data.get("contact") or []) if str(c).strip()]
+
+    band = doc.add_table(rows=1, cols=1)
+    band.autofit = False
+    band.columns[0].width = usable
+    cell = band.cell(0, 0)
+    cell.width = usable
+    _shade_cell(cell, accent_hex)
+    _cell_margins(cell)
+    # First paragraph already exists in the cell; reuse it for the name.
+    np = cell.paragraphs[0]
+    np.paragraph_format.space_after = Pt(0)
+    _run(np, name or "Your Name", bold=True, size=24, color=on)
+    if title:
+        tp = cell.add_paragraph()
+        tp.paragraph_format.space_before = Pt(0)
+        tp.paragraph_format.space_after = Pt(0)
+        _run(tp, title, size=12.5, color=on)
     if contact:
-        p = doc.add_paragraph()
-        p.paragraph_format.space_after = Pt(6)
-        _run(p, "   •   ".join(contact), size=9, color=MUTED)
-        _bottom_border(p, accent_hex, sz=6, space=8)
+        cp = cell.add_paragraph()
+        cp.paragraph_format.space_before = Pt(3)
+        cp.paragraph_format.space_after = Pt(0)
+        _run(cp, "   •   ".join(contact), size=9, color=soft)
+
+    spacer(8)
 
     def section_header(heading):
         p = doc.add_paragraph()
         p.paragraph_format.space_before = Pt(12)
         p.paragraph_format.space_after = Pt(4)
-        _run(p, heading.upper(), bold=True, size=11, color=accent, spacing=24)
-        _bottom_border(p, accent_hex, sz=4, space=4)
+        _run(p, "▍ ", bold=True, size=12, color=accent)  # brand colour tab mark
+        _run(p, heading.upper(), bold=True, size=11.5, color=accent, spacing=24)
+        _bottom_border(p, accent_hex, sz=6, space=4)
 
     def paragraph(text):
         p = doc.add_paragraph()
@@ -1733,6 +1781,8 @@ def render_generation() -> None:
                     )
                 else:
                     # PDF/TXT → redesign into a modern, editable, themed .docx.
+                    # Use the SAME company brand colour the app is themed with.
+                    brand = st.session_state.get("brand_accent")
                     try:
                         structured = regenerate_cv_structured(
                             client,
@@ -1741,7 +1791,8 @@ def render_generation() -> None:
                             accepted,
                             company,
                         )
-                        accent = _parse_accent(structured.get("theme"))
+                        accent = _rgb(brand) if brand \
+                            else _parse_accent(structured.get("theme"))
                         data = build_docx_styled(structured, accent)
                         preview = _structured_to_text(structured)
                     except Exception:
@@ -1752,7 +1803,8 @@ def render_generation() -> None:
                             accepted,
                             company,
                         )
-                        data = build_docx_plain(new_text)
+                        accent = _rgb(brand) if brand else DEFAULT_ACCENT
+                        data = build_docx_plain(new_text, accent)
                         preview = new_text
                 mime = DOCX_MIME
                 ext = "docx"
